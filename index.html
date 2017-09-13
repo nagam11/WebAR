@@ -1,29 +1,20 @@
 <!--
 /*
- * Copyright 2017 Google Inc. All Rights Reserved.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Created by Marla Na on 11.09.17.
+ * Copyright © 2017 Marla Na. All rights reserved.
  */
 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>three.ar.js - Boilerplate</title>
+  <title>WebAR</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, user-scalable=no,
   minimum-scale=1.0, maximum-scale=1.0">
+  <!--CSS Styling--->
   <style>
     body {
-      font-family: monospace;
+      font-family: helvetica;
       margin: 0;
       overflow: hidden;
       position: fixed;
@@ -68,28 +59,47 @@
 </head>
 <body>
 <div id="info">
-    <a href="https://github.com/google-ar/three.ar.js">three.ar.js</a><span class="title">Boilerplate scene</span>
+    <a href="https://github.com/nagam11/WebAR">WebAR</a><span class="title">Tap to create objects</span>
+    <select id="objects">
+      <option value="cube">Cube</option>
+      <option value="line">Line</option>
+      <option value="sprite">SpriteObject</option>
+    </select>
 </div>
+<!--Import js libraries-->
 <script src="./third_party/three.js/three.js"></script>
 <script src="./third_party/three.js/VRControls.js"></script>
 <script src="./dist/three.ar.js"></script>
+<!--AR and Three.js Scripts--->
 <script>
 
-var vrDisplay, vrControls, arView;
-var canvas, camera, scene, renderer;
-var BOX_DISTANCE = 1.5;
-var BOX_SIZE = 0.25;
-var BOX_QUANTITY = 6;
-var boxesAdded = false;
+var vrDisplay;
+var vrFrameData;
+var vrControls;
+var arView;
 
-/**
- * Use the `getARDisplay()` utility to leverage the WebVR API
- * to see if there are any AR-capable WebVR VRDisplays. Returns
- * a valid display if found. Otherwise, display the unsupported
- * browser message.
- */
+var canvas;
+var camera;
+var scene;
+var renderer;
+var cube;
+var line;
+var clones = [];
+
+var colors = [
+  new THREE.Color( 0x66a3ff ),
+  new THREE.Color( 0x4d94ff),
+  new THREE.Color( 0x3385ff ),
+  new THREE.Color( 0x1a75ff ),
+  new THREE.Color( 0x0066ff ),
+  new THREE.Color( 0x005ce6 ),
+  new THREE.Color( 0x0052cc ),
+  new THREE.Color( 0x0047b3 )
+];
+
 THREE.ARUtils.getARDisplay().then(function (display) {
   if (display) {
+    vrFrameData = new VRFrameData();
     vrDisplay = display;
     init();
   } else {
@@ -98,25 +108,21 @@ THREE.ARUtils.getARDisplay().then(function (display) {
 });
 
 function init() {
+  var arDebug = new THREE.ARDebug(vrDisplay);
+  document.body.appendChild(arDebug.getElement());
+
   // Setup the three.js rendering environment
   renderer = new THREE.WebGLRenderer({ alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio);
+  console.log('setRenderer size', window.innerWidth, window.innerHeight);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.autoClear = false;
   canvas = renderer.domElement;
   document.body.appendChild(canvas);
   scene = new THREE.Scene();
 
-  // Creating the ARView, which is the object that handles
-  // the rendering of the camera stream behind the three.js
-  // scene
   arView = new THREE.ARView(vrDisplay, renderer);
 
-  // The ARPerspectiveCamera is very similar to THREE.PerspectiveCamera,
-  // except when using an AR-capable browser, the camera uses
-  // the projection matrix provided from the device, so that the
-  // perspective camera's depth planes and field of view matches
-  // the physical camera on the device.
   camera = new THREE.ARPerspectiveCamera(
     vrDisplay,
     60,
@@ -125,15 +131,11 @@ function init() {
     vrDisplay.depthFar
   );
 
-  // VRControls is a utility from three.js that applies the device's
-  // orientation/position to the perspective camera, keeping our
-  // real world and virtual world in sync.
   vrControls = new THREE.VRControls(camera);
 
-  // Bind our event handlers
   window.addEventListener('resize', onWindowResize, false);
+  canvas.addEventListener('touchstart', onClick, false);
 
-  // Kick off the render loop!
   update();
 }
 
@@ -142,61 +144,117 @@ function init() {
  * our scene and rendering.
  */
 function update() {
-  // Render the device's camera stream on screen first of all.
-  // It allows to get the right pose synchronized with the right frame.
   arView.render();
-
-  // Update our camera projection matrix in the event that
-  // the near or far planes have updated
   camera.updateProjectionMatrix();
-
-  // Update our perspective camera's positioning
+  vrDisplay.getFrameData(vrFrameData);
   vrControls.update();
-
-  // If we have not added boxes yet, and we have positional
-  // information applied to our camera (it can take a few seconds),
-  // and the camera's Y position is not undefined or 0, create boxes
-  if (!boxesAdded && !camera.position.y) {
-    addBoxes();
-  }
-
-  // Render our three.js virtual scene
   renderer.clearDepth();
+
+  //make all cube clones rotate using the loop
+  if(clones.length > 0){
+    for (var i = 0; i < clones.length; i++) {
+      clones[i].rotation.x += 0.1;
+      clones[i].rotation.y += 0.1;
+      }
+  }
+  //render the scene
   renderer.render(scene, camera);
 
-  // Kick off the requestAnimationFrame to call this function
-  // on the next frame
   requestAnimationFrame(update);
 }
 
-/**
- * On window resize, update the perspective camera's aspect ratio,
- * and call `updateProjectionMatrix` so that we can get the latest
- * projection matrix provided from the device
- */
 function onWindowResize () {
+  console.log('setRenderer size', window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 /**
- * Once we have position information applied to our camera,
- * create some boxes at the same height as the camera
+ * When clicking on the screen, create the corresponding object at the user's
+ * current position.
  */
-function addBoxes () {
-  // Create some cubes around the origin point
-  for (var i = 0; i < BOX_QUANTITY; i++) {
-    var angle = Math.PI * 2 * (i / BOX_QUANTITY);
-    var geometry = new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE);
-    var material = new THREE.MeshNormalMaterial();
-    var cube = new THREE.Mesh(geometry, material);
-    cube.position.set(Math.cos(angle) * BOX_DISTANCE, camera.position.y - 0.25, Math.sin(angle) * BOX_DISTANCE);
-    scene.add(cube);
+function onClick () {
+  var x = document.getElementById("objects");
+  var object = x.options[x.selectedIndex].value;
+  if(object == "cube"){
+    createCube();
+  } else if(object == "line"){
+    createLine();
+  } else if(object == "sprite"){
+    createSprite();
   }
+}
+/**
+ * Create a blue rotating cube object
+ */
+function createCube(){
+  var geometry = new THREE.BoxGeometry( 0.05, 0.05, 0.05 );
+  var faceIndices = ['a', 'b', 'c'];
+  for (var i = 0; i < geometry.faces.length; i++) {
+    var f  = geometry.faces[i];
+    for (var j = 0; j < 3; j++) {
+      var vertexIndex = f[faceIndices[ j ]];
+      f.vertexColors[j] = colors[vertexIndex];
+    }
+  }
+  var material = new THREE.MeshBasicMaterial({ vertexColors: THREE.VertexColors });
+  cube = new THREE.Mesh(geometry, material);
 
-  // Flip this switch so that we only perform this once
-  boxesAdded = true;
+  // Fetch the pose data from the current frame
+  var pose = vrFrameData.pose;
+
+  // Convert the pose orientation and position into
+  // THREE.Quaternion and THREE.Vector3 respectively
+  var ori = new THREE.Quaternion(
+    pose.orientation[0],
+    pose.orientation[1],
+    pose.orientation[2],
+    pose.orientation[3]
+  );
+
+  var pos = new THREE.Vector3(
+    pose.position[0],
+    pose.position[1],
+    pose.position[2]
+  );
+
+  var dirMtx = new THREE.Matrix4();
+  dirMtx.makeRotationFromQuaternion(ori);
+
+  var push = new THREE.Vector3(0, 0, -1.0);
+  push.transformDirection(dirMtx);
+  pos.addScaledVector(push, 0.125);
+
+  //create objects
+  var clone = cube.clone();
+  clones.push(clone);
+  scene.add(clone);
+  clone.position.copy(pos);
+  clone.quaternion.copy(ori);
+}
+/**
+ * Create a red Line object
+ */
+function createLine(){
+  //create a blue LineBasicMaterial
+  var material = new THREE.LineBasicMaterial({ color: 0xff3300 });
+  var geometry = new THREE.Geometry();
+  geometry.vertices.push(new THREE.Vector3(-2, 0, 0));
+  geometry.vertices.push(new THREE.Vector3(0, 2, 0));
+  geometry.vertices.push(new THREE.Vector3(2, 0, 0));
+  line = new THREE.Line(geometry, material);
+  scene.add(line);
+}
+
+/**
+ * Create balloons using Sprite
+ */
+function createSprite(){
+  var spriteMap = new THREE.TextureLoader().load( "./sprite_balloon.png" );
+  var spriteMaterial = new THREE.SpriteMaterial( { map: spriteMap, color: 0xffffff } );
+  var sprite = new THREE.Sprite( spriteMaterial );
+  scene.add(sprite);
 }
 </script>
 </body>
